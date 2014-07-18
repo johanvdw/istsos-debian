@@ -1,0 +1,2 @@
+chown -R www-data:www-data /usr/share/istsos/logs
+a2ensite istsos
