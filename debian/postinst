@@ -1,2 +1,5 @@
 chown -R www-data:www-data /usr/share/istsos/logs
+chown -R www-data:www-data /usr/share/istsos/services
+
 a2ensite istsos
+service apache2 reload
