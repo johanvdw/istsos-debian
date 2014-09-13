@@ -11,5 +11,11 @@ Homepage: <insert the upstream URL, if relevant>
 Package: python-istsos
 Architecture: all 
 Depends: ${misc:Depends}, apache2, python-psycopg2,libapache2-mod-wsgi
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Description: Sensor Observation Service Data Management system
+ IstSOS is an OGC Sensor Observation Service (SOS) server implementation
+ written in Python. istSOS allows for managing and dispatch observations
+ from monitoring sensors according to the Sensor Observation Service standard.
+ .
+ The project provides also a Graphical user Interface that allows for easing
+ the daily operations and a RESTFul Web api for automatizing administration
+ procedures. 
