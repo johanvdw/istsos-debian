@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istSOS WebAdmin - Istituto Scienze della Terra
-# Copyright (C) 2012 Massimiliano Cannata, Milan Antonovic
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+#
+# ===============================================================================
 import sys, traceback
 
 def valid_NCName(name):
@@ -220,7 +225,7 @@ def getProcedureNamesList(pgdb,service,offering=None, observationType=None):
         else:
             sql = """
                 SELECT id_prc, name_prc, desc_prc, assignedid_prc, name_oty, stime_prc, etime_prc
-                FROM %s.off_proc op, %s.procedures, %s.offerings, %s.obs_type """ % ((service,)*4)
+                FROM %s.off_proc op, %s.procedures p, %s.offerings o, %s.obs_type """ % ((service,)*4)
             sql += """
                 WHERE o.id_off=op.id_off_fk 
                 AND op.id_prc_fk=p.id_prc 
@@ -364,12 +369,12 @@ def getObservedPropertiesFromProcedure(pgdb,service,procedure):
     
     >>> Return example:
         [
-            { "id":1,"name":"urn:ogc:def:parameter:x-istsos:1.0:lake:water:height"},
-            { "id":2,"name":"urn:ogc:def:parameter:x-istsos:1.0:meteo:air:rainfall"}
+            { "id":1,"def":"urn:ogc:def:parameter:x-istsos:1.0:lake:water:height", "name":"lake-water-height"},
+            { "id":2,"def":"urn:ogc:def:parameter:x-istsos:1.0:meteo:air:rainfall", "name":"lake-air-rainfall"}
         ]
     
     """
-    sql  = "SELECT id_opr, name_opr, name_uom"
+    sql  = "SELECT id_opr, name_opr, def_opr, name_uom"
     sql += " FROM %s.proc_obs po, %s.procedures p, %s.observed_properties o, %s.uoms u" %((service,)*4) 
     sql += " WHERE po.id_prc_fk=p.id_prc AND po.id_opr_fk=o.id_opr AND po.id_uom_fk=u.id_uom"
     sql += " AND name_prc=%s"
@@ -377,7 +382,7 @@ def getObservedPropertiesFromProcedure(pgdb,service,procedure):
     # @todo check this double tuple ?
     rows = pgdb.select(sql,(params,))
     if rows:
-        return [ { "id":row["id_opr"] , "name":row["name_opr"], "uom":row["name_uom"]} for row in rows ]
+        return [ { "id":row["id_opr"] , "name":row["name_opr"], "def": row["def_opr"], "uom":row["name_uom"]} for row in rows ]
     else:
         return None
 

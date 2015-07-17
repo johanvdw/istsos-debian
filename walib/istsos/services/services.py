@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istSOS WebAdmin - Istituto Scienze della Terra
-# Copyright (C) 2012 Massimiliano Cannata, Milan Antonovic
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+#
+# ===============================================================================
 from walib import utils, databaseManager, configManager
 from walib.resource import waResourceAdmin, waResourceService
 import sys, os, shutil, errno
@@ -493,23 +498,30 @@ class waGetobservation(waResourceService):
             rparams.update({
                 "eventTime": "/".join(eventtime)
             })
-            
+        
+        if self.waEnviron['parameters'] and 'aggregatefunction' in self.waEnviron['parameters']:
+            rparams.update({
+                "aggregatefunction": self.waEnviron['parameters']["aggregatefunction"],
+                "aggregateinterval": self.waEnviron['parameters']["aggregateinterval"]
+            })
+            if 'aggregatenodata' in self.waEnviron['parameters']:
+                rparams.update({
+                    "aggregatenodata": self.waEnviron['parameters']["aggregatenodata"]
+                })
+            if 'aggregatenodataqi' in self.waEnviron['parameters']:
+                rparams.update({
+                    "aggregatenodataqi": self.waEnviron['parameters']["aggregatenodataqi"]
+                })
+          
         response = requests.get(
             self.serviceconf.serviceurl["url"], 
             params=rparams
         )
         
-        obsjson = response.json
-        
-        '''try:
-            obsjson["ObservationCollection"]["member"][0]["observedProperty"]["components"] = obsjson["ObservationCollection"]["member"][0]["observedProperty"]["component"]
-        except:
-            print >> sys.stderr,  "ERROR"
-            pass'''
-            
         # build the response --------------------------------------------------- 
         try:
             response.raise_for_status()
+            obsjson = response.json()
             self.setData( obsjson["ObservationCollection"]["member"] )
             self.setMessage("GetObservation requested successfully executed")
         except Exception as e:
@@ -697,8 +709,6 @@ class waInsertobservation(waResourceService):
                     uom = et.SubElement(Quantity, "{%s}uom" % ns['swe'] )
                     uom.attrib["code"] = item["uom"]
                 
-                
-                
         encoding = et.SubElement(DataArray, "{%s}encoding" % ns['swe'] )
         TextBlock = et.SubElement(encoding, "{%s}TextBlock" % ns['swe'] )
         TextBlock.attrib["tokenSeparator"] = ","
@@ -717,7 +727,7 @@ class waInsertobservation(waResourceService):
             data=iostring, 
             headers={
                 "Content-type": "text/xml",
-                "User-Agent": "Walib post"
+                "User-Agent": "WalibPost;InsertObservation"
             }
         )
         data = response.text

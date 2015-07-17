@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-#---------------------------------------------------------------------------
-# istSOS - Istituto Scienze della Terra
-# Copyright (C) 2013 Milan Antonovic, Massimiliano Cannata
-#---------------------------------------------------------------------------
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#---------------------------------------------------------------------------
+#
+# ===============================================================================
 """
 
 File example:
@@ -79,7 +83,12 @@ class KernImporter(raw2csv.Converter):
         raw2csv.Converter.__init__(self, procedureName, url, service,
             inputDir, fileNamePattern, outputDir,
             qualityIndex, exceptionBehaviour, user, password, debug, csvlength, filenamecheck, archivefolder)
-            
+        
+        '''d1 = self.getDSEndPosition() - timedelta(minutes=-10080)  # one week behind
+        d2 = datetime(year=dt.year,month=1,day=1)
+        
+        perfect_pattern = "%s_%s" % (str(d1.year)[-2:], ((d1-d2).total_seconds()/60))'''
+        
     def minutesdate(self, year, minutes):
         d1 = datetime(year=int(year),month=1,day=1)
         d1 = (d1 + timedelta(minutes=int(minutes)))

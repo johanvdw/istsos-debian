@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istSOS WebAdmin - Istituto Scienze della Terra
-# Copyright (C) 2012 Massimiliano Cannata, Milan Antonovic
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+#
+# ===============================================================================
 import sys, traceback
 import json
 from lib.etree import et
@@ -83,11 +88,20 @@ class Procedure():
             raise TypeError("xml input must be a string representing the XML itself or the path to the file where the XML is stored")
             #tree, ns = parse_and_get_ns(xml)
         
+        # Workaround for rare xml parsing bug in etree
+        ns = {
+            'swe': 'http://www.opengis.net/swe/1.0.1',
+            'gml': 'http://www.opengis.net/gml',
+            'sml': 'http://www.opengis.net/sensorML/1.0.1',
+            'xlink': 'http://www.w3.org/1999/xlink',
+            'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+        }
+        
         #-----System name/identifier------
         system = tree.find("{%s}member/{%s}System" %(ns['sml'],ns['sml']) )
         try:
             self.data['system_id'] = system.attrib[ "{%s}id" % ns['gml'] ]
-        except:
+        except Exception as e:
             raise SyntaxError("Error in <sml:member>: <sml:System> element or mandatory attribute are missing")
         
         systemname = tree.find("{%s}member/{%s}System/{%s}name" %(ns['sml'],ns['sml'],ns['gml']) )
@@ -231,7 +245,9 @@ class Procedure():
                 except:
                     item["web"] = ""
                 self.data["contacts"].append(item)
-            except:
+            except Exception as e:
+                print "ECCEZIONE: "
+                print str(e)
                 raise SyntaxError("Error in <swe:contact>: some <swe:contact> mandatory sub elements or attributes are missing")
             
         

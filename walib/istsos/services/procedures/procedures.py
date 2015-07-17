@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istSOS WebAdmin - Istituto Scienze della Terra
-# Copyright (C) 2012 Massimiliano Cannata, Milan Antonovic
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,12 +18,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+#
+# ===============================================================================
 from walib import procedure, utils, databaseManager
 from walib.resource import waResourceService
 import lib.requests as requests
 import os
 import sys
+
+convertToSec = {
+'min': lambda x: x * 60,
+'h': lambda x: x * 3600,
+'d': lambda x: x * 24 * 3600,
+'s': lambda x: x,
+'ms': lambda x: x/1000,
+'us': lambda x: x/1000000,
+}
 
 class waProcedures(waResourceService):
     """class to handle SOS service objects, support GET and POST method"""
@@ -171,8 +185,7 @@ class waProcedures(waResourceService):
         response = requests.post(
             self.serviceconf.serviceurl["url"],
             data=smlstring,
-            headers={"Content-type": "text/xml"},
-            prefetch=True
+            headers={"Content-type": "text/xml"}
         )
 
         try:
@@ -269,6 +282,8 @@ class waProcedures(waResourceService):
         msg1 = ""
         msg2 = ""
 
+             
+        
         if proc.data['system'] != self.procedurename:
             #rename procedure in transaction
             sql  = "UPDATE %s.procedures" % self.service
@@ -284,6 +299,27 @@ class waProcedures(waResourceService):
 
             msg1 = "Procedure '%s' successfully renamed to '%s'" %(self.procedurename,str(self.json["system"]))
 
+# Update for sapling time and acquisition time
+        time_acq_val = None
+        time_sam_val = None
+
+        for cap in proc.data['capabilities']:
+            if 'samplingTimeResolution' in cap['definition']:
+                
+                time_sam_val = convertToSec[cap['uom']](int(cap['value'])) # convertToSec(cap['uom'],int(cap['value']))
+                #print >> sys.stderr, "Sampling value: ",time_sam_val, cap['value']
+                
+            elif 'acquisitionTimeResolution' in cap['definition']:
+                
+                time_acq_val = convertToSec[cap['uom']](int(cap['value'])) # convertToSec(cap['uom'],int(cap['value']))
+                #print >> sys.stderr, "Acquisition value: ",time_acq_val, cap['value']
+                
+
+        sql = "UPDATE %s.procedures" % self.service
+        sql += " SET time_res_prc = %s, time_acq_prc = %s WHERE name_prc= %s"
+        params = (time_sam_val,time_acq_val,self.procedurename)                
+        servicedb.executeInTransaction(sql,params)
+                
         #allows to update observed property constraints
         for obsprop in proc.data['outputs']:
             if "constraint" in obsprop:
@@ -467,23 +503,22 @@ class waProcedures(waResourceService):
         }
         """
 
-        import lib.requests as requests
-        res = requests.get(
-            self.serviceconf.serviceurl["url"],
-            params={
-                "request": "DescribeSensor",
-                "procedure": self.procedurename,
-                "outputFormat": "text/xml;subtype=\"sensorML/1.0.1\"",
-                "service": "SOS",
-                "version": "1.0.0"
-            }
-        )
-
-        smlobj = procedure.Procedure()
         try:
+            import lib.requests as requests
+            res = requests.get(
+                self.serviceconf.serviceurl["url"],
+                params={
+                    "request": "DescribeSensor",
+                    "procedure": self.procedurename,
+                    "outputFormat": "text/xml;subtype=\"sensorML/1.0.1\"",
+                    "service": "SOS",
+                    "version": "1.0.0"
+                }
+            )
+            smlobj = procedure.Procedure()
             smlobj.loadXML(res.content)
         except Exception as e:
-            print >> sys.stderr, "\n\nSML: %s\n\n" % res.content
+            print >> sys.stderr, "\n\nSML: %s\n%s\n" % (self.procedurename,res.content)
             raise Exception("Error loading DescribeSensor of '%s' [STATUS CODE: %s]: %s" % (self.procedurename,res.status_code,e))
 
         # Searching for the assignedSensorId from the database
@@ -507,6 +542,7 @@ class waProcedures(waResourceService):
         else:
             self.setException("Unable to find the procedure's assignedSensorId")
 
+    
 
 
 class waGetlist(waResourceService):
@@ -548,6 +584,7 @@ class waGetlist(waResourceService):
             self.setData(data)
             self.setMessage("Procedures of service <%s> successfully retrived" % self.servicename)
 
+  
 
 class waGetGeoJson(waResourceService):
     """
@@ -558,7 +595,7 @@ class waGetGeoJson(waResourceService):
 
         import pprint
         pp = pprint.PrettyPrinter(indent=4)
-        print >> sys.stderr, "\n\nENVIRON: %s" % pp.pprint(self.serviceconf.get("geo")['istsosepsg'])
+        #print >> sys.stderr, "\n\nENVIRON: %s" % pp.pprint(self.serviceconf.get("geo")['istsosepsg'])
 
         if self.waEnviron['parameters'] and self.waEnviron['parameters']['epsg']:
             self.epsg = self.waEnviron['parameters']['epsg'][0]
@@ -574,20 +611,51 @@ class waGetGeoJson(waResourceService):
                     "type": "FeatureCollection",
                     "features": []
                 }
+                
                 servicedb = databaseManager.PgDB(self.serviceconf.connection['user'],
                                                 self.serviceconf.connection['password'],
                                                 self.serviceconf.connection['dbname'],
                                                 self.serviceconf.connection['host'],
                                                 self.serviceconf.connection['port']
                 )
+
                 proceduresList = utils.getProcedureNamesList(servicedb,self.service)
                 for proc in proceduresList:
+                    
+                    
+                    if proc['samplingTime']['beginposition'] == '':
+                        print >> sys.stderr, proc['name']
+                        import lib.requests as requests
+                        res = requests.get(
+                            self.serviceconf.serviceurl["url"],
+                            params={
+                                "request": "DescribeSensor",
+                                "procedure": proc['name'],
+                                "outputFormat": "text/xml;subtype=\"sensorML/1.0.1\"",
+                                "service": "SOS",
+                                "version": "1.0.0"
+                            }
+                        )
+
+                        smlobj = procedure.Procedure()
+                        try:
+                            smlobj.loadXML(res.content)
+                        except Exception as e:
+                            print >> sys.stderr, "\n\nSML: %s\n\n" % res.content
+                            raise Exception("Error loading DescribeSensor of '%s' [STATUS CODE: %s]: %s" % (proc['name'],res.status_code,e))
+                        ret = {}
+                        ret.update(smlobj.data)    
+
+                        proc['samplingTime']['beginposition'] = ret['outputs'][0]['constraint']['interval'][0]
+                        proc['samplingTime']['endposition'] = ret['outputs'][0]['constraint']['interval'][1]
+                        #print >> sys.stderr, ret['outputs'][0]['constraint']['interval']                    
+                    
                     elem = {}
                     elem.update(proc)
                     #elem["name"] = proc["name"]
                     ops = utils.getObservedPropertiesFromProcedure(servicedb,self.service,proc["name"])
                     if ops != None:
-                        elem["observedproperties"] = [ {"name" : op["name"], "uom" : op["uom"]  } for op in ops ]
+                        elem["observedproperties"] = [ {"name" : op["name"], "def" : op["def"], "uom" : op["uom"]  } for op in ops ]
                     else:
                         elem["observedproperties"] = []
                     offs = utils.getOfferingsFromProcedure(servicedb,self.service,proc["name"])
@@ -616,4 +684,5 @@ class waGetGeoJson(waResourceService):
     def setData(self,data):
         """ Set data in response """
         self.response = data
-
+        
+     

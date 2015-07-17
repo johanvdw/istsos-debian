@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istsos Istituto Scienze della Terra Sensor Observation Service
-# Copyright (C) 2010 Massimiliano Cannata
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,10 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-
-#import psycopg2 # @TODO the right library
-#import psycopg2.extras
+#
+# ===============================================================================
 import os, sys
 
 #import sosConfig
@@ -174,19 +176,17 @@ class VirtualProcess():
         
         sql = """
             SELECT DISTINCT id_prc, name_prc, name_oty, 
-                stime_prc, etime_prc, time_res_prc, name_tru 
+                stime_prc, etime_prc, time_res_prc
             FROM 
                 %s.procedures, 
                 %s.proc_obs p, 
                 %s.observed_properties, 
                 %s.uoms, 
-                %s.time_res_unit, 
-                %s.obs_type """ % ((self.filter.sosConfig.schema,)*6 )
+                %s.obs_type """ % ((self.filter.sosConfig.schema,)*5 )
         sql += """
                 WHERE id_prc = p.id_prc_fk 
                 AND id_opr_fk = id_opr 
                 AND id_uom = id_uom_fk 
-                AND id_tru = id_tru_fk 
                 AND id_oty = id_oty_fk
                 AND name_prc=%s"""
         
@@ -279,7 +279,7 @@ class VirtualProcessHQ(VirtualProcess):
                         self.filter.sosConfig.virtual_processes_folder,
                         self.filter.procedure[0],
                         self.filter.procedure[0]+".rcv"
-				)
+                )
         tp=[]
         if self.filter.eventTime == None:
             tp = [None,None]
@@ -357,7 +357,7 @@ class VirtualProcessHQ(VirtualProcess):
         if self.filter.qualityIndex == True:
             data_out=[]
             for rec in data:
-                if (float(rec[1])) < -999.0:
+                if rec[1] is None or (float(rec[1])) < -999.0:
                     data_out.append([ rec[0], -999.9, 110 ])
                 else:
                     for o in range(len(self.hqCurves['from'])):
@@ -555,7 +555,7 @@ class Observation:
         #=============================================
         
         k = o.keys()
-        if not ("id_prc" in k and "name_prc" in k and  "name_oty" in k and "stime_prc" in k and "etime_prc" in k and "time_res_prc" in k and "name_tru" in k ):
+        if not ("id_prc" in k and "name_prc" in k and  "name_oty" in k and "stime_prc" in k and "etime_prc" in k and "time_res_prc" in k  ):
             raise Exception("Error, baseInfo argument: %s"%(o))
         
         #SET PROCEDURE NAME AND ID
@@ -576,7 +576,8 @@ class Observation:
         #SET TIME: RESOLUTION VALUE AND UNIT
         #===================================
         self.timeResVal = o["time_res_prc"]
-        self.timeResUnit = o["name_tru"]
+# Rimoved with tru table 
+        #self.timeResUnit = o["name_tru"]
         
         #SET SAMPLING TIME
         #===================================
@@ -593,10 +594,10 @@ class Observation:
     def setData(self,pgdb,o,filter):
         """get data according to request filters"""
         # @todo mettere da qualche altra parte
-	        
+            
         #SET FOI OF PROCEDURE
         #=========================================
-        sqlFoi  = "SELECT name_fty, name_foi, ST_AsGml(ST_Transform(geom_foi,%s)) as gml" %(filter.srsName)
+        sqlFoi  = "SELECT name_fty, name_foi, ST_AsGml(ST_Transform(geom_foi,%s)) as gml, st_x(geom_foi) as x, st_y(geom_foi) as y " %(filter.srsName)
         sqlFoi += " FROM %s.procedures, %s.foi, %s.feature_type" %(filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema)
         sqlFoi += " WHERE id_foi_fk=id_foi AND id_fty_fk=id_fty AND id_prc=%s" %(o["id_prc"])
         try:
@@ -606,11 +607,15 @@ class Observation:
         
         self.featureOfInterest = resFoi[0]["name_foi"]
         self.foi_urn = filter.sosConfig.urn["feature"] + resFoi[0]["name_fty"] + ":" + resFoi[0]["name_foi"]
+        srs = filter.srsName or filter.sosConfig.istsosepsg
         if resFoi[0]["gml"].find("srsName")<0:
-            srs = filter.srsName or filter.sosConfig.istsosepsg
             self.foiGml = resFoi[0]["gml"][:resFoi[0]["gml"].find(">")] + " srsName=\"EPSG:%s\"" % srs + resFoi[0]["gml"][resFoi[0]["gml"].find(">"):]
         else:
             self.foiGml = resFoi[0]["gml"]
+        
+        self.srs = srs
+        self.x = resFoi[0]["x"]
+        self.y = resFoi[0]["y"]
         
         #SET INFORMATION ABOUT OBSERVED_PROPERTIES
         #=========================================       
@@ -661,7 +666,8 @@ class Observation:
             valeFieldName = []
             for idx, obspr_row in enumerate(obspr_res):
                 if self.qualityIndex==True:
-                    cols.append("C%s.val_msr as c%s_v, C%s.id_qi_fk as c%s_qi" %(idx,idx,idx,idx))
+                    #cols.append("C%s.val_msr as c%s_v, C%s.id_qi_fk as c%s_qi" %(idx,idx,idx,idx))
+                    cols.append("C%s.val_msr as c%s_v, COALESCE(C%s.id_qi_fk,%s) as c%s_qi" %(idx,idx,idx,filter.aggregate_nodata_qi,idx))
                     valeFieldName.append("c%s_v" %(idx))
                     valeFieldName.append("c%s_qi" %(idx))
                 else:
@@ -699,8 +705,8 @@ class Observation:
                 #if filter.qualityIndex and filter.qualityIndex.__class__.__name__=='str':
                 #    join_txt += " AND %s\n" %(filter.qualityIndex)
 
-                # ATTETION: HERE -999 VALUES ARE EXCLUDED WHEN ASKING AN AGGREAGATE FUNCTION
-                if filter.aggregate_interval != None:
+                # ATTENTION: HERE -999 VALUES ARE EXCLUDED WHEN ASKING AN AGGREAGATE FUNCTION
+                if filter.aggregate_interval != None: # >> Should be removed because measures data is not inserted if there is a nodata value
                     join_txt += " AND A%s.val_msr > -900 " % idx
                 
                 # If eventTime is set add to JOIN part
@@ -756,6 +762,7 @@ class Observation:
                 join_txt += " ) as Cx on Cx.id_eti_fk = et.id_eti\n"
                 sqlSel += " Cx.x as x, Cx.y as y, Cx.z as z, "
                 if self.qualityIndex==True:
+                    #sqlSel += "COALESCE(Cx.posqi,%s) as posqi, " % filter.aggregate_nodata_qi
                     sqlSel += "Cx.posqi, "
                 joinar.append(join_txt)
             
@@ -874,9 +881,7 @@ class Observation:
             else:
                 self.aggregate_function = None
                 
-            #--------- debug execute query --------
-            #raise sosException.SOSException(3,sql)
-            #--------------------------------------
+            #print sql.replace('\n','')
             
             try:
                 data_res = pgdb.select(sql)
@@ -1004,14 +1009,17 @@ class observations:
         #=========================================
         #---select part of query
         sqlSel = "SELECT DISTINCT"
-        sqlSel += " id_prc, name_prc, name_oty, stime_prc, etime_prc, time_res_prc, name_tru"
+        sqlSel += " id_prc, name_prc, name_oty, stime_prc, etime_prc, time_res_prc"
         #---from part of query
-        sqlFrom = "FROM %s.procedures, %s.proc_obs p, %s.observed_properties, %s.uoms, %s.time_res_unit," %(filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema)
+#################################
+# Rimosso codice di time_res_unit
+#################################
+        sqlFrom = "FROM %s.procedures, %s.proc_obs p, %s.observed_properties, %s.uoms," %(filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema)
         sqlFrom += " %s.off_proc o, %s.offerings, %s.obs_type" %(filter.sosConfig.schema,filter.sosConfig.schema,filter.sosConfig.schema)
         if filter.featureOfInterest or filter.featureOfInterestSpatial:
             sqlFrom += " ,%s.foi, %s.feature_type" %(filter.sosConfig.schema,filter.sosConfig.schema)
         
-        sqlWhere = "WHERE id_prc=p.id_prc_fk AND id_opr_fk=id_opr AND o.id_prc_fk=id_prc AND id_off_fk=id_off AND id_uom=id_uom_fk AND id_tru=id_tru_fk AND id_oty=id_oty_fk"
+        sqlWhere = "WHERE id_prc=p.id_prc_fk AND id_opr_fk=id_opr AND o.id_prc_fk=id_prc AND id_off_fk=id_off AND id_uom=id_uom_fk AND id_oty=id_oty_fk"
         sqlWhere += " AND name_off='%s'" %(filter.offering) 
         
         #---where condition based on featureOfInterest

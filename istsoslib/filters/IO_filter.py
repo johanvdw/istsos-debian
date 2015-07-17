@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istsos Istituto Scienze della Terra Sensor Observation Service
-# Copyright (C) 2010 Massimiliano Cannata
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,8 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-#import sosConfig
+#
+# ===============================================================================
 from istsoslib.filters import filter as f
 from istsoslib import sosException
 from lib.etree import et
@@ -56,6 +60,20 @@ class sosIOfilter(f.sosFilter):
             from StringIO import StringIO
             
             tree, ns = parse_and_get_ns(StringIO(requestObject))
+            
+            # Workaround for rare xml parsing bug in etree
+            ns = {
+                'gml': 'http://www.opengis.net/gml',
+                'swe': 'http://www.opengis.net/swe',
+                'om': 'http://www.opengis.net/om/1.0',
+                'sos': 'http://www.opengis.net/sos/1.0',
+                'xlink': 'http://www.w3.org/1999/xlink',
+                'xsi': 'http://www.w3.org/2001/XMLSchema-instance',
+                
+            }
+            
+            if not 'swe' in ns:
+                ns['swe'] = 'http://www.opengis.net/swe/1.0.1'
             
             #---assignedSensorId
             #----------------------
@@ -118,6 +136,7 @@ class sosIOfilter(f.sosFilter):
                         name = co.find( "{%s}name" % ns['gml'] )
                         self.oprName.append(name.text)
                     except:
+                        print >> sys.stderr, "XML: %s" % requestObject
                         raise sosException.SOSException("NoApplicableCode",None,"om:observedProperty Name is missing: 'xlink:href' or 'gml:name' required")
                     
             #-----samplingTime

@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istsos Istituto Scienze della Terra Sensor Observation Service
-# Copyright (C) 2010 Massimiliano Cannata
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,10 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-#import sosConfig
+#
+# ===============================================================================
 from istsoslib.filters import filter as f
 from istsoslib import sosException
+
 
 class sosDSfilter(f.sosFilter):
     "filter object for a DescribeSensor request"
@@ -50,12 +55,12 @@ class sosDSfilter(f.sosFilter):
                         pass
                     else:
                         err_txt = "Supported \"procedure\" urn is: " + sosConfig.urn["procedure"]
-                        err_txt += "\n passed: " + ":".join(prc) 
+                        err_txt += "\n passed: " + ":".join(prc)
                         raise sosException.SOSException("InvalidParameterValue","procedure",err_txt)
             else:
                 raise sosException.SOSException("MissingParameterValue","procedure","Parameter \"procedure\" is mandatory with multiplicity 1")
-        #**************************            
-        if method == "POST":            
+        #**************************
+        if method == "POST":
             from xml.dom import minidom
             self.outputFormat = None
             self.procedure = None
@@ -85,7 +90,7 @@ class sosDSfilter(f.sosFilter):
                             else:
                                 err_txt = "Supported \"procedure\" urn is: " + sosConfig.urn["procedure"]
                                 raise sosException.SOSException("InvalidParameterValue","procedure",err_txt)
-                        self.procedure = prc[-1] 
+                        self.procedure = prc[-1]
                     else:
                         err_txt = "XML parsing error (get value: procedure)"
                         raise sosException.SOSException("MissingParameterValue","procedure","Parameter \"procedure\" is mandatory with multiplicity 1",err_txt)
@@ -95,4 +100,4 @@ class sosDSfilter(f.sosFilter):
             else:
                 err_txt = "Parameter \"procedure\" is mandatory"
                 raise sosException.SOSException("MissingParameterValue","procedure","Parameter \"procedure\" is mandatory with multiplicity 1")
-                
+
