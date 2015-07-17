@@ -3,5 +3,4 @@
 export PYBUILD_NAME=istsos
 
 %:
-	dh $@ --with python2 --buildsystem pybuild
-
+	dh $@ --with python2
