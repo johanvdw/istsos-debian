@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-#---------------------------------------------------------------------------
-# istSOS - Istituto Scienze della Terra
-# Copyright (C) 2013 Massimiliano Cannata, Milan Antonovic
-#---------------------------------------------------------------------------
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#---------------------------------------------------------------------------
+#
+# ===============================================================================
 """
 description:
     
@@ -43,6 +47,7 @@ try:
     import lib.isodate as iso
 except ImportError as e:
     print "\nError loading internal libs:\n >> please run the script from the istSOS root folder.\n\n"
+    print str(e)
     raise e
     
 class Converter():
@@ -76,14 +81,15 @@ class Converter():
         """
         
         self.req = requests.session()
-        self.req.config['keep_alive'] = False
     
         self.name = name
         self.url = url
         self.service = service
         self.folderIn = folderIn
         self.pattern = pattern
+        
         self.folderOut = folderOut if folderOut is not None else tempfile.mkdtemp()
+        
         self.qualityIndex = qualityIndex
         self.user = user
         self.password = password
@@ -91,8 +97,13 @@ class Converter():
 
         self.debugfile = False
         if debug == 'file':
-            self.debug = True
-            self.debugfile = open(os.path.join(self.folderOut, "log.txt"), "w")
+            self.debug = False
+            try:
+                self.debugfile = open(os.path.join(self.folderOut, "log.txt"), "w")
+            except Exception as e:
+              self.log(str(e))
+              self.debug = True
+              self.debugfile = False
         else:
             self.debug = debug
         
@@ -103,7 +114,7 @@ class Converter():
         self.fntd = self.fnre = self.fndf = None
         if type(filenamecheck) == type({}):
             if 'dateformat' in filenamecheck:
-                self.fndf = filenamecheck['dateformat'] 
+                self.fndf = filenamecheck['dateformat']
             if 'datetz' in filenamecheck:
                 self.fndtz = filenamecheck['datetz'] 
             if 'replace' in filenamecheck:
@@ -143,14 +154,24 @@ class Converter():
         if self.debugfile:
             self.debugfile.flush()
             self.debugfile.close()
+            self.debug = True
+            self.debugfile = False
+            self.log("  > Debug file closed..")
         if self.archivefolder:
             self.archive() 
+        # Deleting temporary working directory
+        for root, dirs, files in os.walk(self.folderOut, topdown=False):
+            for name in files:
+                os.remove(os.path.join(root, name))
+            for name in dirs:
+                os.rmdir(os.path.join(root, name))
+        os.rmdir(self.folderOut)
     
     def log(self, message):
         if self.debug:
             print message 
-            if self.debugfile:
-                self.debugfile.write("%s\n" % message)
+        if self.debugfile:
+            self.debugfile.write("%s\n" % message)
                 
     
     def addMessage(self, message):
@@ -237,7 +258,7 @@ class Converter():
             'dsrv': ssrv,
             'function': function if function is not None else None,
             'resolution': resolution if resolution is not None else None,
-            'nodataValue': nodataValue if nodataValue is not None else None,
+            'nodataValue': nodataValue if nodataValue is not None else None, 
             'nodataQI': nodataQI if nodataQI is not None else None
         },self)
     
@@ -280,7 +301,12 @@ class Converter():
                 "file": fileObj
             }
             dat = open(fileObj,'rU')
-            self.parse(dat,os.path.split(fileObj)[1])
+            try:
+                self.parse(dat,os.path.split(fileObj)[1])
+            except Exception as e:
+                self.log(" !! Error while parsing file: %s" % os.path.split(fileObj)[1])
+                dat.close()
+                raise e
             dat.close()
         
         self.log(" > Parsed %s observations" % len(self.observations))
@@ -312,13 +338,13 @@ class Converter():
                 self.service,
                 self.name
             ), 
-            prefetch=True, 
             auth=self.auth, 
             verify=False
         )
-        if res.json['success']==False:
-            raise IstSOSError ("Description of procedure %s can not be loaded: %s" % (self.name, res.json['message']))
-        self.describe = res.json['data']
+        json = res.json()
+        if json['success']==False:
+            raise IstSOSError ("Description of procedure %s can not be loaded: %s" % (self.name, json['message']))
+        self.describe = json['data']
         
         self.obsindex = []
         for out in self.describe['outputs']:
@@ -428,6 +454,7 @@ class Converter():
             if self.getIOEndPosition() == None:
                 f = open(os.path.join(self.folderOut,"%s_%s.dat" %(
                     self.name,
+
                     datetime.strftime(self.observations[-1].getEventime().astimezone(timezone('UTC')), "%Y%m%d%H%M%S%f"))), 'w')
             else:
                 if self.getIOEndPosition() < self.observations[-1].getEventime():
@@ -444,10 +471,11 @@ class Converter():
             # there is a "no data" observation (rain)
             if self.getIOEndPosition() == None:
                 raise IstSOSError("The file has no observations, if this happens, you shall use the setEndPosition function to set the endPosition manually")
-            f = open(os.path.join(self.folderOut,"%s_%s.dat" %(
+            f = open(os.path.join(self.folderOut,"%s_%s.dat" % (
                 self.name,
                 datetime.strftime(self.getIOEndPosition().astimezone(timezone('UTC')), "%Y%m%d%H%M%S%f"))), 'w')
             f.write("%s\n" % ",".join(self.obsindex))
+        f.flush()
         f.close()
         
 class InitializationError(Exception):

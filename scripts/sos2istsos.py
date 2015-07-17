@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-# istSOS WebAdmin - Istituto Scienze della Terra
-# Copyright (C) 2013 Massimiliano Cannata, Milan Antonovic
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+#
+# ===============================================================================
 '''
 This script get minimal metadata from an existing SOS and populate an istsos instance
 '''
@@ -144,11 +149,11 @@ class Procedure():
                 )
             )
             try:
-                self.template = res.json['data'][0]
+                self.template = res.json()['data'][0]
             except Exception as e:
                 print res.text
                 raise e
-        return self.template #res.json['data'][0]
+        return self.template #res.json()['data'][0]
 
     
 def parse_and_get_ns(xml):
@@ -165,10 +170,12 @@ def parse_and_get_ns(xml):
                 root = elem 
     return et.ElementTree(root), ns
    
-def execute (args):  
+def execute (args):
     pp = pprint.PrettyPrinter(indent=2)
     try:
     
+        istsos_version = args['istsos'] if 'istsos' in args else None
+        
         debug = args['v']
         test = args['t']
         
@@ -208,13 +215,13 @@ def execute (args):
             'version': '1.0.0',
             'request': 'GetCapabilities',
             'section': 'contents'
-        }, prefetch=True, verify=False)
+        }, verify=False)
         
         # Parsing response
         gc, gcNs = parse_and_get_ns(StringIO(res.content))
         
         # Extract all offerings
-        elOfferings = gc.findall("{%s}Contents/{%s}ObservationOfferingList/{%s}ObservationOffering" % (gcNs['sos'],gcNs['sos'],gcNs['sos']) )
+        elOfferings = gc.findall("{%s}Contents/{%s}ObservationOfferingList/{%s}ObservationOffering" % (gcNs['sos'],gcNs['sos'],gcNs['sos']))
         
         for offering in elOfferings:
             offeringName = offering.find("{%s}name" % (gcNs['gml']) ).text.split(":")[-1]
@@ -243,7 +250,7 @@ def execute (args):
                     'request': 'DescribeSensor',
                     'outputFormat': 'text/xml;subtype=\'sensorML/1.0.0\'',
                     'procedure': pname
-                }, prefetch=True, verify=False)
+                }, verify=False)
                 
                 ds, dsNs = parse_and_get_ns(StringIO(res.content))
                 
@@ -255,16 +262,42 @@ def execute (args):
                     print "Error on DS for %s" % pname
                     continue
                     
-                elDescribe = ds.findall("member/{%s}System/{%s}outputs/{%s}OutputList/{%s}output" % (dsNs['sml'],dsNs['sml'],dsNs['sml'],dsNs['sml']) )
+                
                 
                 #print "Outputs found: %s" % len(elDescribe)
                 
                 observedProperties = []
-                for ds in elDescribe:
-                    definition = ds.find("{%s}ObservableProperty" % (dsNs['swe'])).get('definition').replace('urn:ogc:def:parameter:x-ist::','')
-                    #print definition
-                    if definition.find('time:iso8601')<0:
-                        observedProperties.append(definition)
+                print "istsos_version: ", istsos_version
+                uniqidurn = 'urn:ogc:def:parameter:x-ist::'
+                if istsos_version != None and istsos_version == '2':
+                    uniqidurn = 'urn:ogc:def:parameter:x-ist:1.0:'
+                    elFields = ds.findall("{%s}member/{%s}System/{%s}outputs/{%s}OutputList/{%s}output/{%s}DataRecord/{%s}field" % (
+                                    dsNs['sml'],dsNs['sml'],dsNs['sml'],dsNs['sml'],dsNs['sml'],dsNs['swe'],dsNs['swe']) )
+                    print "Observed properties (v2): %s " % len(elFields)
+                    for fs in elFields:
+                        print fs.get('name')
+                        if fs.get('name') != 'Time':
+                            observedProperties.append(fs.find("{%s}Quantity" % (dsNs['swe'])).get('definition').replace(uniqidurn,''))
+                        
+                else:
+                    elDescribe = ds.findall("member/{%s}System/{%s}outputs/{%s}OutputList/{%s}output" % (dsNs['sml'],dsNs['sml'],dsNs['sml'],dsNs['sml']) )
+                    print "Observed properties: %s " % len(elDescribe)
+                    for ds in elDescribe:
+                        definition = ds.find("{%s}ObservableProperty" % (dsNs['swe'])).get('definition').replace(uniqidurn,'')
+                        #print definition
+                        if definition.find('time:iso8601')<0:
+                            observedProperties.append(definition)
+                            
+                
+                print {
+                    'service': 'SOS', 
+                    'version': '1.0.0',
+                    'request': 'GetObservation',
+                    'offering': offeringName,
+                    'responseFormat': 'text/xml;subtype=\'sensorML/1.0.0\'',
+                    'procedure': pname,
+                    'observedProperty': ",".join(observedProperties)
+                }
                 
                 res = req.get("%s" % (src), params={
                     'service': 'SOS', 
@@ -274,7 +307,7 @@ def execute (args):
                     'responseFormat': 'text/xml;subtype=\'sensorML/1.0.0\'',
                     'procedure': pname,
                     'observedProperty': ",".join(observedProperties)
-                }, prefetch=True, verify=False)
+                }, verify=False)
                               
                 go, goNs = parse_and_get_ns(StringIO(res.content))
                 
@@ -308,14 +341,23 @@ def execute (args):
                 point = foi.find("{%s}Point" % (
                     goNs['gml'])
                 )
+                
+                if point == None:
+                    point = foi.find("{%s}FeatureCollection/{%s}location/{%s}Point" % (
+                        goNs['gml'],goNs['gml'],goNs['gml'])
+                    )
+                
                 coord = point.find("{%s}coordinates" % (
                     goNs['gml'])
-                )
+                ).text.split(",")
+                
+                if len(coord) == 2:
+                    coord.append('0')
                 
                 procedures[pname].setFoi(
                     foi.get('{%s}href' % gcNs['xlink']).split(":")[-1],
                     point.get('srsName'),
-                    coord.text.split(",")
+                    coord
                 )
                 
                 # Extracting UOM
@@ -333,7 +375,7 @@ def execute (args):
                         )                        
                         procedures[pname].addObservedProperty(
                             field.get('name'),
-                            qty.get('definition').replace('urn:ogc:def:parameter:x-ist::',''), 
+                            qty.get('definition').replace(uniqidurn,''), 
                             uom.get('code')
                         )
                 
@@ -354,15 +396,15 @@ def execute (args):
                 # ~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
                 
                 # Check if procedure already exist
-                res = req.get("%s/wa/istsos/services/%s/procedures/%s" % (dst,srv,pname))  
-                if not res.json["success"]:
+                res = req.get("%s/wa/istsos/services/%s/procedures/%s" % (dst,srv,pname), verify=False)  
+                if not res.json()["success"]:
                     # Registering procedure to istSOS   
                     res = req.post("%s/wa/istsos/services/%s/procedures" % (dst,srv), 
                             data=json.dumps(procedures[pname].data)
                     ) 
-                    if not res.json["success"]:
-                        print json.dumps(procedures[pname].data)
-                        raise Exception("Registering procedure %s failed: \n%s" % (pname, res.json["message"]))
+                    if not res.json()["success"]:
+                        #print json.dumps(procedures[pname].data)
+                        raise Exception("Registering procedure %s failed: \n%s" % (pname, res.json()["message"]))
                     
                     # Getting details (describe sensor) to get the assignedSensorId
                     res = req.get("%s/wa/istsos/services/%s/procedures/%s" % (dst,srv,pname))  
@@ -381,7 +423,7 @@ def execute (args):
                         print res.text
                         raise exproc
                 
-                procedures[pname].oid = res.json["data"]["assignedSensorId"]
+                procedures[pname].oid = res.json()["data"]["assignedSensorId"]
                 days = int(args['i'])
                 interval = timedelta(days=int(days))
                 
@@ -421,7 +463,10 @@ def execute (args):
                             
                             t = float(calendar.timegm(end.utctimetuple())-calendar.timegm(_begin.utctimetuple()))
                             t1 = float(calendar.timegm(nextPosition.utctimetuple())-calendar.timegm(_begin.utctimetuple()))
-                            percentage = round((t1/t)*100,2)
+                            try:
+                                percentage = round((t1/t)*100,2)
+                            except:
+                                percentage = 0
                             if percentage > 100:
                                 percentage = 100
                             lastPrint = "%s > %s%% (%s / %s %s days)" % ("\b"*len(lastPrint),percentage, begin.strftime(fmtshort), nextPosition.strftime(fmtshort), days)
@@ -442,9 +487,9 @@ def execute (args):
                                 'observedProperty': ",".join(observedProperties)
                             }
                             try:
-                                res = req.get("%s" % (src), params=params, prefetch=True, verify=False)
+                                res = req.get("%s" % (src), params=params, verify=False)
                             except Exception:
-                                res = req.get("%s" % (src), params=params, prefetch=True, verify=False)
+                                res = req.get("%s" % (src), params=params, verify=False)
                             
                             gotime = timedelta(seconds=int(time.time() - looptime))
                             
@@ -461,9 +506,7 @@ def execute (args):
                             lastPrint = "%s - GO: '%s'" % (lastPrint, gotime)
                             
                             go, goNs = parse_and_get_ns(StringIO(res.content))
-                            
-                            #print res.text
-                            
+                                                        
                             if len(oOrder)==0:
                                 fields = go.findall("{%s}member/{%s}Observation/{%s}result/{%s}DataArray/{%s}elementType/{%s}DataRecord/{%s}field" % (
                                     goNs['om'], goNs['om'], goNs['om'], goNs['swe'], goNs['swe'], goNs['swe'], goNs['swe'])
@@ -489,9 +532,13 @@ def execute (args):
                                 # InsertObservation to istSOS
                                 template['result']['DataArray']['values'] = copy
                                 template['samplingTime'] = {
-                                    "beginPosition": begin.strftime(fmt),
+                                    "beginPosition": copy[0][0],
                                     "endPosition": nextPosition.strftime(fmt)
                                 }
+                                '''template['samplingTime'] = {
+                                    "beginPosition": begin.strftime(fmt),
+                                    "endPosition": nextPosition.strftime(fmt)
+                                }'''
                                 
                                 template[u"AssignedSensorId"] = procedures[pname].oid
                                 
@@ -528,7 +575,7 @@ def execute (args):
                         
                         
                         print " > Completed in %s" % timedelta(seconds=int(time.time() - startTime))
-            
+            break
     except Exception as e:    
         print "ERROR: %s\n\n" % e
         traceback.print_exc()
@@ -538,6 +585,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Import data from an external SOS to an istSOS instance.')
     
+    parser.add_argument('--istsos',
+        action = 'store',
+        dest   = 'istsos',
+        metavar= 'istsos',
+        help   = 'Set source istSOS version (accepted versions only 2)')
+        
     parser.add_argument('-p', 
         action='store',
         dest='p',
@@ -583,7 +636,7 @@ if __name__ == "__main__":
     parser.add_argument('-a',
         action = 'store_true',
         dest   = 'a',
-        help   = 'Add this parameter, if you want to replace all the dataset instead of appending after existing observations.')
+        help   = 'Add this parameter, if you want to append after existing observations instead of replacing all the dataset.')
     
     parser.add_argument('--from', 
         action='store',

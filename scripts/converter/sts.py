@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-#---------------------------------------------------------------------------
-# istSOS - Istituto Scienze della Terra
-# Copyright (C) 2013 Milan Antonovic, Massimiliano Cannata
-#---------------------------------------------------------------------------
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#---------------------------------------------------------------------------
+#
+# ===============================================================================
 """
 
 @todo to be enhanced, it is a little bit hardcoded :(
@@ -75,7 +79,7 @@ class StsImporter(raw2csv.Converter):
         
         for line in fileObj.readlines():
             
-            if line.find(skipline)==0:
+            if line.find(skipline)==0 or line.find('data')>-1:
                 continue
             
             pair = line.split(";")
@@ -84,10 +88,19 @@ class StsImporter(raw2csv.Converter):
                 op: pair[1]
             }
             
+            
             data = datetime.strptime(pair[0], dateformat)
             if "tz" in self.config:
                 data = self.getDateTimeWithTimeZone(data, self.config["tz"])
-            
+                
+            # Removing seconds from date
+            '''if "zerofill" in self.config:
+                if 's' in self.config['zerofill']:'''
+            data = datetime(
+                data.year, data.month, data.day, data.hour, 
+                data.minute, 0, tzinfo=data.tzinfo)
+                            
+                    
             self.setEndPosition(data)
             self.addObservation(
                 raw2csv.Observation(data, val)

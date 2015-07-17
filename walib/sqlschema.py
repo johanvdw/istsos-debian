@@ -1,4 +1,25 @@
 # -*- coding: utf-8 -*-
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+#
+# ===============================================================================
 createsqlschema = u"""
 
 SET statement_timeout = 0;
@@ -193,8 +214,9 @@ CREATE TABLE procedures (
     stime_prc timestamp with time zone,
     etime_prc timestamp with time zone,
 
-    id_tru_fk integer NOT NULL,
+   -- id_tru_fk integer NOT NULL,
     time_res_prc integer,
+    time_acq_prc integer,
     id_oty_fk integer,
     id_foi_fk integer,
     assignedid_prc character varying(32) NOT NULL
@@ -219,18 +241,18 @@ COMMENT ON TABLE quality_index IS 'Stores the QualityIndexes.';
 
 --=====================================
 
-CREATE TABLE time_res_unit (
-    id_tru integer NOT NULL,
-    name_tru character varying(15)
-);
-COMMENT ON TABLE time_res_unit IS 'Stores the Procedure''s time resolution units.';
+--CREATE TABLE time_res_unit (
+--    id_tru integer NOT NULL,
+--    name_tru character varying(15)
+--);
+--COMMENT ON TABLE time_res_unit IS 'Stores the Procedure''s time resolution units.';
 
-CREATE SEQUENCE time_res_unit_id_tru_seq
-    INCREMENT BY 1
-    NO MAXVALUE
-    NO MINVALUE
-    CACHE 1;
-ALTER SEQUENCE time_res_unit_id_tru_seq OWNED BY time_res_unit.id_tru;
+--CREATE SEQUENCE time_res_unit_id_tru_seq
+--    INCREMENT BY 1
+--    NO MAXVALUE
+--    NO MINVALUE
+--    CACHE 1;
+--ALTER SEQUENCE time_res_unit_id_tru_seq OWNED BY time_res_unit.id_tru;
 
 --=====================================
 
@@ -271,6 +293,20 @@ CREATE SEQUENCE tran_log_id_trl_seq
 ALTER SEQUENCE tran_log_id_trl_seq OWNED BY tran_log.id_trl;
 
 --=====================================
+CREATE TYPE status AS ENUM ('verified','pending');
+CREATE TABLE cron_log
+(
+   id_clo serial NOT NULL, 
+   id_prc_fk integer NOT NULL,              -- "5"
+   process_clo character varying NOT NULL, -- "acquisizione"
+   element_clo character varying NOT NULL, -- "T_TREVANO"
+   datetime_clo timestamp with time zone NOT NULL, -- "NOW"
+   message_clo character varying NOT NULL, -- "TIPO DI ECCEZIONE"
+   details_clo character varying, -- "MESSAGGIO LIBERO"
+   status_clo status,            -- "error"
+   PRIMARY KEY (id_clo)
+);
+--=====================================
 -- NEXTVALS
 --=====================================
 
@@ -285,7 +321,7 @@ ALTER TABLE offerings ALTER COLUMN id_off SET DEFAULT nextval('offerings_id_off_
 ALTER TABLE positions ALTER COLUMN id_pos SET DEFAULT nextval('measures_mobile_id_mmo_seq'::regclass);
 ALTER TABLE proc_obs ALTER COLUMN id_pro SET DEFAULT nextval('prc_obs_id_pro_seq'::regclass);
 ALTER TABLE procedures ALTER COLUMN id_prc SET DEFAULT nextval('procedures_id_prc_seq'::regclass);
-ALTER TABLE time_res_unit ALTER COLUMN id_tru SET DEFAULT nextval('time_res_unit_id_tru_seq'::regclass);
+--ALTER TABLE time_res_unit ALTER COLUMN id_tru SET DEFAULT nextval('time_res_unit_id_tru_seq'::regclass);
 ALTER TABLE uoms ALTER COLUMN id_uom SET DEFAULT nextval('uoms_id_uom_seq'::regclass);
 ALTER TABLE tran_log ALTER COLUMN id_trl SET DEFAULT nextval('tran_log_id_trl_seq'::regclass);
 
@@ -332,8 +368,8 @@ ALTER TABLE ONLY procedures
     ADD CONSTRAINT procedures_pkey PRIMARY KEY (id_prc);
 ALTER TABLE ONLY quality_index
     ADD CONSTRAINT quality_index_pkey PRIMARY KEY (id_qi);
-ALTER TABLE ONLY time_res_unit
-    ADD CONSTRAINT time_res_unit_pkey PRIMARY KEY (id_tru);
+--ALTER TABLE ONLY time_res_unit
+--    ADD CONSTRAINT time_res_unit_pkey PRIMARY KEY (id_tru);
 ALTER TABLE ONLY uoms
     ADD CONSTRAINT uoms_pkey PRIMARY KEY (id_uom);
 ALTER TABLE ONLY event_time
@@ -364,11 +400,13 @@ ALTER TABLE ONLY procedures
     ADD CONSTRAINT procedures_id_foi_fk_fkey FOREIGN KEY (id_foi_fk) REFERENCES foi(id_foi);
 ALTER TABLE ONLY procedures
     ADD CONSTRAINT procedures_id_oty_fk_fkey FOREIGN KEY (id_oty_fk) REFERENCES obs_type(id_oty);
-ALTER TABLE ONLY procedures
-    ADD CONSTRAINT procedures_id_tru_fk_fkey FOREIGN KEY (id_tru_fk) REFERENCES time_res_unit(id_tru);
+--ALTER TABLE ONLY procedures
+--    ADD CONSTRAINT procedures_id_tru_fk_fkey FOREIGN KEY (id_tru_fk) REFERENCES time_res_unit(id_tru);
 ALTER TABLE ONLY tran_log
     ADD CONSTRAINT tran_log_pkey PRIMARY KEY (id_trl);
-   
+ALTER TABLE ONLY cron_log
+    ADD CONSTRAINT cron_log_id_prc_fk_fkey FOREIGN KEY (id_prc_fk) REFERENCES procedures(id_prc) ON DELETE CASCADE;    
+    
 --=====================================
 -- INDEXES
 --=====================================
@@ -391,5 +429,35 @@ INSERT INTO quality_index (name_qi, desc_qi, id_qi) VALUES ('correct', 'the valu
 INSERT INTO obs_type (id_oty, name_oty, desc_oty) VALUES (1, 'insitu-fixed-point', 'fixed, in-situ, pointwise observation');
 INSERT INTO obs_type (id_oty, name_oty, desc_oty) VALUES (2, 'insitu-mobile-point', 'mobile, in-situ, pointwise observation');
 INSERT INTO obs_type (id_oty, name_oty, desc_oty) VALUES (3, 'virtual', 'virtual procedure');
+
+--=====================================
+-- ADDING OBSERVED PROPERTIES
+--=====================================
+/*
+INSERT INTO observed_properties VALUES ('air-rainfall', 'urn:ogc:def:parameter:x-istsos:1.0:meteo:air:rainfall', 'liquid precipitation or snow water equivalent', '{"role": "urn:x-ogc:def:classifiers:x-istsos:1.0:qualityIndexCheck:level0", "min": "0"}', 2);
+INSERT INTO observed_properties VALUES ('air-relative-humidity', 'urn:ogc:def:parameter:x-istsos:1.0:meteo:air:humidity:relative', 'absolute humidity relative to the maximum for that air', '{"interval": ["0", "100"], "role": "urn:x-ogc:def:classifiers:x-istsos:1.0:qualityIndexCheck:level0"}', 3);
+INSERT INTO observed_properties VALUES ('air-wind-velocity', 'urn:ogc:def:parameter:x-istsos:1.0:meteo:air:wind:velocity', 'wind speed at 1 meter above terrain', '{"role": "urn:x-ogc:def:classifiers:x-istsos:1.0:qualityIndexCheck:level0", "min": "0"}', 4);
+INSERT INTO observed_properties VALUES ('solar-radiation', 'urn:ogc:def:parameter:x-istsos:1.0:meteo:solar:radiation', 'Direct radiation sum in spectrum rand', NULL, 5);
+INSERT INTO observed_properties VALUES ('river-height', 'urn:ogc:def:parameter:x-istsos:1.0:river:water:height', '', '{"interval": ["0", "10"], "role": "urn:x-ogc:def:classifiers:x-istsos:1.0:qualityIndexCheck:level0"}', 6);
+INSERT INTO observed_properties VALUES ('river-discharge', 'urn:ogc:def:parameter:x-istsos:1.0:river:water:discharge', '', NULL, 7);
+INSERT INTO observed_properties VALUES ('soil-evapotranspiration', 'urn:ogc:def:parameter:x-istsos:1.0:meteo:soil:evapotranspiration', '', NULL, 8);
+INSERT INTO observed_properties VALUES ('air-temperature', 'urn:ogc:def:parameter:x-istsos:1.0:meteo:air:temperature', 'air temperature at 2 meters above terrain', '{"interval": ["-40", "100"], "role": "urn:x-ogc:def:classifiers:x-istsos:1.0:qualityIndexCheck:level0"}', 1);
+SELECT pg_catalog.setval('obs_pr_id_opr_seq', 8, true);
+
+--=====================================
+-- ADDING UNIT OF MEASURES
+--=====================================
+
+INSERT INTO uoms VALUES ('null', '', 0);
+INSERT INTO uoms VALUES ('mm', 'millimeter', 1);
+INSERT INTO uoms VALUES ('°C', 'Celsius degree', 2);
+INSERT INTO uoms VALUES ('%', 'percentage', 3);
+INSERT INTO uoms VALUES ('m/s', 'metre per second', 4);
+INSERT INTO uoms VALUES ('W/m2', 'Watt per square metre', 5);
+INSERT INTO uoms VALUES ('°F', 'Fahrenheit degree', 6);
+INSERT INTO uoms VALUES ('m', 'metre', 7);
+INSERT INTO uoms VALUES ('m3/s', 'cube meter per second', 8);
+SELECT pg_catalog.setval('uoms_id_uom_seq', 8, true);
+*/
 
 """

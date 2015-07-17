@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-#---------------------------------------------------------------------------
-# istSOS - Istituto Scienze della Terra
-# Copyright (C) 2014 Milan Antonovic, Massimiliano Cannata
-#---------------------------------------------------------------------------
+# ===============================================================================
+#
+# Authors: Massimiliano Cannata, Milan Antonovic
+#
+# Copyright (c) 2015 IST-SUPSI (www.supsi.ch/ist)
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License.
+# the Free Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#---------------------------------------------------------------------------
+#
+# ===============================================================================
 """
 description:
     
@@ -151,8 +155,8 @@ def execute (args, logger=None):
         surl,
         ssrv,
         procedure
-        ), prefetch=True, auth=(suser, spwd), verify=False)
-    sdata = res.json
+        ), auth=(suser, spwd), verify=False)
+    sdata = res.json()
     if sdata['success']==False:
         raise Exception ("Description of procedure %s can not be loaded from source service: %s" % (procedure, sdata['message']))
     else:
@@ -161,20 +165,20 @@ def execute (args, logger=None):
     # Loading describe sensor from destination ================================
     res = req.get("%s/wa/istsos/services/%s/procedures/%s" % (
             durl, dsrv, procedure
-        ), prefetch=True, auth=(duser, dpwd), verify=False)
-    ddata = res.json
+        ), auth=(duser, dpwd), verify=False)
+    ddata = res.json()
     if ddata['success']==False:
         raise Exception ("Description of procedure %s can not be loaded from destination service: %s" % (procedure, ddata['message']))
     else:
         log("   > DS Destination Ok.")
         
-    # Load of a getobservation template =======================================
+    # Load of a getobservation template from destination =======================================
     res = req.get("%s/wa/istsos/services/%s/operations/getobservation/offerings/%s/procedures/%s/observedproperties/:/eventtime/last?qualityIndex=False" % (
             durl, dsrv, 'temporary', procedure
         ),  params={
             "qualityIndex": cpqi
-        }, prefetch=True, auth=(duser, dpwd), verify=False)
-    dtemplate = res.json
+        }, auth=(duser, dpwd), verify=False)
+    dtemplate = res.json()
     if dtemplate['success']==False:
         raise Exception ("Observation template of procedure %s can not be loaded: %s" % (procedure, dtemplate['message']))
     else:
@@ -187,8 +191,8 @@ def execute (args, logger=None):
     if aurl and asrv:
         res = req.get("%s/wa/istsos/services/%s/procedures/%s" % (
                 aurl, asrv, procedure
-            ), prefetch=True, auth=(auser, apwd), verify=False)
-        adata = res.json
+            ), auth=(auser, apwd), verify=False)
+        adata = res.json()
         if adata['success']==False:
             raise Exception ("Description of procedure %s can not be loaded from destination service: %s" % (procedure, adata['message']))
         else:
@@ -196,29 +200,29 @@ def execute (args, logger=None):
 
     log("\n2. Identifying processing interval:")
     
-    
-    # Check if mesaures are present in source procedure, if it is empty an exception is thrown
+    # Check if mesaures are present in source procedure, by identifying the sampling time constraint 
+    #  located always in the first position of the outputs, if it is empty an exception is thrown
     if (not 'constraint' in sdata['data']['outputs'][0] 
             or not 'interval' in sdata['data']['outputs'][0]['constraint'] ):
         raise Exception ("There is no data in the source procedure to be copied to the destination procedure.")
-    
-    # Check if the contraint interval contains a valid ISO date begin position
-    try:
-        iso.parse_datetime(sdata['data']['outputs'][0]['constraint']['interval'][0])
-    except Exception:
-        raise Exception ("The date in the source procedure constraint interval (%s) is not valid." % 
-            sdata['data']['outputs'][0]['constraint']['interval'][0])
-    
-    # Check if the contraint interval contains a valid ISO date end position
-    try:
-        iso.parse_datetime(sdata['data']['outputs'][0]['constraint']['interval'][1])
-    except Exception:
-        raise Exception ("The date in the source procedure constraint interval (%s) is not valid." % 
-            sdata['data']['outputs'][0]['constraint']['interval'][1])
+    else:
+        # Check if the contraint interval contains a valid ISO date begin position
+        try:
+            iso.parse_datetime(sdata['data']['outputs'][0]['constraint']['interval'][0])
+        except Exception:
+            raise Exception ("The date in the source procedure constraint interval (%s) is not valid." % 
+                sdata['data']['outputs'][0]['constraint']['interval'][0])
+        
+        # Check if the contraint interval contains a valid ISO date end position
+        try:
+            iso.parse_datetime(sdata['data']['outputs'][0]['constraint']['interval'][1])
+        except Exception:
+            raise Exception ("The date in the source procedure constraint interval (%s) is not valid." % 
+                sdata['data']['outputs'][0]['constraint']['interval'][1])
     
     log("   > Source interval is valid")
     
-    # Looking for start instant processing 
+    # Looking for start (IO beginPOsition) instant processing 
     #   If the default value (*) is used, then the endPosition of 
     #   the "destination" service procedure will be used. But if the destination
     # procedure is empty , then the begin position of the source will be used
@@ -228,24 +232,45 @@ def execute (args, logger=None):
         if ('constraint' in ddata['data']['outputs'][0] 
             and 'interval' in ddata['data']['outputs'][0]['constraint']):
                 try:
-                    # Using the end position of the destination will be used
-                    start = iso.parse_datetime(ddata['data']['outputs'][0]['constraint']['interval'][1])
-                    # Retroactive aggregation
-                    if retro > 0:
+                    if function and resolution:
+                        # getting last inserted observations of "destination" service
+                        log("Aggregation requested: getting last inserted observations of \"destination\" service")
+                        params = {
+                            "request": "GetObservation",
+                            "service": "SOS",
+                            "version": "1.0.0",
+                            "observedProperty": ':',
+                            "procedure": procedure,
+                            "responseFormat": "application/json",
+                            "offering": 'temporary'
+                        }
+                        res = req.get("%s/%s" % (durl,dsrv), params=params, auth=(duser, dpwd), verify=False)
+                        obs = res.json()
+                        start = iso.parse_datetime(obs['ObservationCollection']['member'][0]['result']['DataArray']['values'][0][0])
+                    else:
+                        # The endPosition of the destination will be used as Start/IO BeginPosition
+                        start = iso.parse_datetime(ddata['data']['outputs'][0]['constraint']['interval'][1])
+                    if retro > 0: # Retroactive aggregation
+                        log("Retroactive aggregation active.")
                         if start-timedelta(minutes=retro) > iso.parse_datetime(ddata['data']['outputs'][0]['constraint']['interval'][0]):
                             start = start-timedelta(minutes=retro)
                         else:
                             start = iso.parse_datetime(ddata['data']['outputs'][0]['constraint']['interval'][0])
-                except Exception:
-                    raise Exception ("The date in the destination procedure constraint interval (%s) is not valid." % 
-                        ddata['data']['outputs'][0]['constraint']['interval'][0])
+                            
+                    log("Start: %s" % start)
+                    
+                except Exception as ee:
+                    print "Error setting start date for proc %s: %s" % (procedure,ee)
+                    raise Exception ("The date in the destination procedure %s constraint interval (%s) is not valid." % 
+                        (procedure,ddata['data']['outputs'][0]['constraint']['interval'][0]))
         else:
-            # Using the begin position of the source will be used
+            # The beginPosition of the source will be used as Start/IO BeginPosition
             start = iso.parse_datetime(sdata['data']['outputs'][0]['constraint']['interval'][0])           
     else:
         start = iso.parse_datetime(begin)
     
     if end == "*":
+        # The endPosition of the source will be used as Stop/IO EndPosition
         stop = iso.parse_datetime(sdata['data']['outputs'][0]['constraint']['interval'][1])   
     else:
         stop = iso.parse_datetime(end)
@@ -267,7 +292,7 @@ def execute (args, logger=None):
         try:
             iso.duration_isoformat(resolution)
         except:
-            raise Exception ("The resolution (%s) to apply in the aggrating function is not valid." % resolution)
+            raise Exception ("The resolution (%s) to apply in the aggregating function is not valid." % resolution)
         log("   > Function(Resolution) : %s(%s)" % (function,resolution))
         
     while start+interval<=stop:        
@@ -296,34 +321,32 @@ def execute (args, logger=None):
             if nodataQI != None:
                 params['aggregateNodataQi'] = nodataQI
         
-        res = req.get("%s/%s" % (surl,ssrv),  params=params, prefetch=True, auth=(suser, spwd), verify=False)
+        res = req.get("%s/%s" % (surl,ssrv),  params=params, auth=(suser, spwd), verify=False)
         
         # Check if an Exception occured
         if 'ExceptionReport' in res.content:
             raise Exception (res.content)
         
-        smeasures = res.json['ObservationCollection']['member'][0]
+        smeasures = res.json()['ObservationCollection']['member'][0]
         #pp.pprint(smeasures)
         
         log("   > %s measures from: %s to: %s" % (len(smeasures['result']['DataArray']['values']), start.isoformat(), nextStart.isoformat()))
         
-        dtemplate["samplingTime"] = {
-            "beginPosition": start.isoformat()
-        }
+        dtemplate["samplingTime"] = {}
         if lm and len(smeasures['result']['DataArray']['values'])>0:
+            dtemplate["samplingTime"]["beginPosition"] = smeasures['result']['DataArray']['values'][0][0]
             dtemplate["samplingTime"]["endPosition"] = smeasures['result']['DataArray']['values'][-1][0]
         else:
+            dtemplate["samplingTime"]["beginPosition"] = start.isoformat()
             dtemplate["samplingTime"]["endPosition"] = nextStart.isoformat()
             
         dtemplate['result']['DataArray']['values'] = smeasures['result']['DataArray']['values']
-            
         dtemplate['result']['DataArray']['field'] = smeasures['result']['DataArray']['field']
         
         # POST data to WA
         res = req.post("%s/wa/istsos/services/%s/operations/insertobservation" % (
             durl,
             dsrv), 
-            prefetch=True,
             auth=(duser, dpwd),
             verify=False,
             data=json.dumps({
@@ -334,10 +357,12 @@ def execute (args, logger=None):
         )
         
         # read response
-        log("     > Insert observation success: %s" % res.json['success'])
+        log("     > Insert observation success: %s" % res.json()['success'])
         
-        if not res.json['success']:
-            raise Exception ('Error inserting observation: %s' % res.json['message'])
+        #print res.json()
+        
+        if not res.json()['success']:
+            raise Exception ('Error inserting observation: %s' % res.json()['message'])
         
         start = nextStart
         if start<stop and start+interval>stop:
@@ -510,4 +535,6 @@ if __name__ == "__main__":
         help   = 'Password, if given this will be used for istSOS QI EXTRAPOLATION')
         
     args = parser.parse_args()
+    
     execute(args.__dict__)
+    
