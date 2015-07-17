@@ -1,5 +1,5 @@
-istsos (2.1.1-1) unstable; urgency=low
+istsos (2.2.0-1) UNRELEASED; urgency=medium
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial release (Closes: #761362)
 
- -- Johan Van de Wauw <johan.vandewauw@gmail.com>  Fri, 18 Jul 2014 11:43:53 +0200
+ -- Johan Van de Wauw <johan.vandewauw@gmail.com>  Fri, 17 Jul 2015 14:17:20 +0200
