@@ -1,6 +1,6 @@
 *.py /usr/share/istsos
 
-logs /usr/share/istsos
+logs /var/log/istsos
 test /usr/share/istsos
 interface /usr/share/istsos
 istsoslib /usr/share/istsos
