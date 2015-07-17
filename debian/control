@@ -1,5 +1,5 @@
 Source: istsos
-Section: web
+Section: python
 Priority: optional
 Maintainer: Johan Van de Wauw <johan.vandewauw@gmail.com>
 Build-Depends: debhelper (>= 9),  python-all-dev, python, python-setuptools, apache2
