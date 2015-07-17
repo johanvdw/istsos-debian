@@ -1,3 +1,4 @@
+#chown -R www-data:www-data /var/istsos/logs
 chown -R www-data:www-data /usr/share/istsos/logs
 chown -R www-data:www-data /usr/share/istsos/services
 
